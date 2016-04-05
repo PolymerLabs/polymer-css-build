@@ -11,22 +11,18 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 'use strict';
 const hyd = require('hydrolysis');
 const dom5 = require('dom5');
-const pred = dom5.predicates;
 const Polymer = require('./lib/polymer-styling.js');
+
+const pred = dom5.predicates;
 
 const path = process.argv[2];
 
-function getDomModules(analyzer, id) {
-  if (!analyzer.__domModuleCache) {
-    analyzer.__domModuleCache = {};
-  }
-  if (analyzer.__domModuleCache[id]) {
-    return analyzer.__domModuleCache[id];
-  }
-  analyzer.__domModuleCache[id] =
-      analyzer.nodeWalkAllDocuments(domModuleForId(id));
-  return analyzer.__domModuleCache[id];
-}
+const domModuleCache = {};
+
+const domModuleMatch = pred.AND(
+  pred.hasTagName('dom-module'),
+  pred.hasAttr('id')
+);
 
 const styleMatch = pred.AND(
   pred.hasTagName('style'),
@@ -38,19 +34,12 @@ const styleMatch = pred.AND(
   )
 );
 
-const isCustomStyle = pred.AND(
+const customStyleMatch = pred.AND(
   pred.hasTagName('style'),
   pred.hasAttrValue('is', 'custom-style')
 );
 
 const scopeMap = new WeakMap();
-
-function domModuleForId(id) {
-  return pred.AND(
-    pred.hasTagName('dom-module'),
-    pred.hasAttrValue('id', id)
-  );
-}
 
 function getDomModuleStyles(module, scope) {
   const styles = dom5.queryAll(module, styleMatch);
@@ -83,43 +72,94 @@ function getDomModuleStyles(module, scope) {
   return styles;
 }
 
+const styleIncludeMatch = pred.AND(styleMatch, pred.hasAttr('include'));
+
+function inlineStyleIncludes(style, scope) {
+  if (!styleIncludeMatch(style)) {
+    return;
+  }
+  const styleText = [];
+  const includes = (dom5.getAttribute(style, 'include') || '').split(' ');
+  includes.forEach((id,idx) => {
+    const module = domModuleCache[id];
+    if (!module) {
+      return;
+    }
+    // remove this include from the list
+    includes.splice(idx, 1);
+    const includedStyles = getDomModuleStyles(module, scope)
+    // gather included styles
+    includedStyles.forEach(ism => {
+      styleText.push(dom5.getTextContent(ism));
+    });
+  });
+  // remove inlined includes
+  if (includes.length) {
+    dom5.setAttribute(style, 'include', includes.join(' '));
+  } else {
+    dom5.removeAttribute(style, 'include');
+  }
+  // prepend included styles
+  if (styleText.length) {
+    let text = dom5.getTextContent(style);
+    text = styleText.join('') + text;
+    dom5.setTextContent(style, text);
+  }
+}
+
+function applyShim(ast) {
+  /*
+   * `transform` expects an array of decorated <style> elements
+   *
+   * Decorated <style> elements are ones with `__cssRules` property
+   * with a value of the CSS ast
+   */
+  Polymer.ApplyShim.transform([{__cssRules: ast}]);
+}
+
 let analyzer;
 
 hyd.Analyzer.analyze(path, {attachAST: true}).then(a => {
   analyzer = a;
   return analyzer.html[path].depsLoaded;
 }).then(() => {
-  return analyzer.elements.map(el => {
-    if (el.is === 'Polymer.Base') {
+  return analyzer.nodeWalkAllDocuments(domModuleMatch).map(el => {
+    const id = dom5.getAttribute(el, 'id');
+    if (!id) {
       return [];
     }
-    const domModules = getDomModules(analyzer, el.is);
-    if (domModules.length === 0) {
-      return [];
-    }
-    return getDomModuleStyles(domModules[0], el.is);
+    // populate cache
+    domModuleCache[id] = el;
+    return getDomModuleStyles(el, id);
   }).reduce((a, b) => a.concat(b));
 }).then(styles => {
-  return styles.concat(analyzer.nodeWalkAllDocuments(isCustomStyle))
+  return styles.concat(analyzer.nodeWalkAllDocuments(customStyleMatch))
 }).then(styles => {
+  styles.forEach(s => {
+    const scope = scopeMap.get(s);
+    inlineStyleIncludes(s, scope);
+  });
+  return styles;
+}).then(styles => {
+  // reverse list to catch mixin use before definition
+  styles.reverse();
   // populate mixin map
   styles.forEach(s => {
     const text = dom5.getTextContent(s);
-    Polymer.ApplyShim.transformCssText(text);
+    const ast = Polymer.CssParse.parse(text);
+    applyShim(ast);
   });
   // parse, transform, emit
   styles.forEach(s => {
     let text = dom5.getTextContent(s);
     const ast = Polymer.CssParse.parse(text);
-    // fake <style> with parsed css rules
-    const fakeStyles = [{__cssRules: ast}];
-    if (isCustomStyle(s)) {
+    if (customStyleMatch(s)) {
       // custom-style `:root` selectors need to be processed to `html`
       Polymer.StyleUtil.forEachRule(ast, rule => {
         Polymer.StyleTransformer.documentRule(rule);
       })
     }
-    Polymer.ApplyShim.transform(fakeStyles);
+    applyShim(ast);
     const scope = scopeMap.get(s);
     if (scope) {
       // Polymer.StyleTransformer.css(ast, scope);
@@ -130,6 +170,6 @@ hyd.Analyzer.analyze(path, {attachAST: true}).then(a => {
 }).then(() => {
   console.log(dom5.serialize(analyzer.parsedDocuments[path]));
 }).catch(err => {
-  console.log(err.stack)
+  console.error(err.stack)
   process.exit(1);
 });
