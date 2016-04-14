@@ -12,6 +12,8 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 const hyd = require('hydrolysis');
 const dom5 = require('dom5');
 const Polymer = require('./lib/polymer-styling.js');
+// Polymer.Settings.useNativeShadow = false;
+const nativeShadow = Polymer.Settings.useNativeShadow;
 
 const pred = dom5.predicates;
 
@@ -79,7 +81,13 @@ function inlineStyleIncludes(style, scope) {
     return;
   }
   const styleText = [];
-  const includes = (dom5.getAttribute(style, 'include') || '').split(' ');
+  const includesAttr = dom5.getAttribute(style, 'include');
+  let includes;
+  if (!includesAttr) {
+    includes = [];
+  } else {
+    includes = includesAttr.split(' ');
+  }
   includes.forEach((id,idx) => {
     const module = domModuleCache[id];
     if (!module) {
@@ -117,11 +125,44 @@ function applyShim(ast) {
   Polymer.ApplyShim.transform([{__cssRules: ast}]);
 }
 
+const inlineScriptMatch = pred.AND(
+  pred.hasTagName('script'),
+  pred.OR(
+    pred.NOT(
+      pred.hasAttr('type')
+    ),
+    pred.hasAttrValue('type', 'text/javascript'),
+    pred.hasAttrValue('type', 'application/javascript')
+  ),
+  pred.NOT(
+    pred.hasAttr('src')
+  )
+);
+
+function addClass(node, className) {
+  const classAttr = dom5.getAttribute(node, 'class');
+  let classList;
+  if (!classAttr) {
+    classList = [];
+  } else {
+    classList = classAttr.split(' ');
+  }
+  classList.push(className, 'style-scope');
+  dom5.setAttribute(node, 'class', classList.join(' '));
+}
+
 let analyzer;
 
 hyd.Analyzer.analyze(path, {attachAST: true}).then(a => {
   analyzer = a;
   return analyzer.html[path].depsLoaded;
+}).then(() => {
+  analyzer.nodeWalkAllDocuments(inlineScriptMatch).forEach(script => {
+    if (script.__hydrolysisInlined) {
+      dom5.setAttribute(script, 'src', script.__hydrolysisInlined);
+      dom5.setTextContent(script, '');
+    }
+  });
 }).then(() => {
   return analyzer.nodeWalkAllDocuments(domModuleMatch).map(el => {
     const id = dom5.getAttribute(el, 'id');
@@ -161,8 +202,18 @@ hyd.Analyzer.analyze(path, {attachAST: true}).then(a => {
     }
     applyShim(ast);
     const scope = scopeMap.get(s);
-    if (scope) {
-      // Polymer.StyleTransformer.css(ast, scope);
+    if (!nativeShadow && scope) {
+      Polymer.StyleTransformer.css(ast, scope);
+      const module = domModuleCache[scope];
+      if (module) {
+        const template = dom5.query(module, pred.hasTagName('template'));
+        if (template) {
+          const elements = dom5.queryAll(template, () => true);
+          elements.forEach(el => {
+            addClass(el, scope);
+          })
+        }
+      }
     }
     text = Polymer.CssParse.stringify(ast, true);
     dom5.setTextContent(s, text);
