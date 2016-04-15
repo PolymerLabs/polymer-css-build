@@ -19,7 +19,7 @@ const pred = dom5.predicates;
 
 const path = process.argv[2];
 
-const domModuleCache = {};
+const domModuleCache = Object.create(null);
 
 const domModuleMatch = pred.AND(
   pred.hasTagName('dom-module'),
