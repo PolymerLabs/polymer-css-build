@@ -17,6 +17,14 @@ var Polymer = {
     resolveCss: function(css) {
       return css;
     }
+  },
+  Base: {
+    mixin: function(target, source) {
+      for (var i in source) {
+        target[i] = source[i];
+      }
+      return target;
+    }
   }
 };
 module.exports = Polymer;

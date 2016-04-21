@@ -222,6 +222,6 @@ module.exports = (paths) => {
       dom5.setTextContent(s, text);
     });
   }).then(() => {
-    dom5.serialize(analyzer.parsedDocuments[path]);
+    return dom5.serialize(analyzer.parsedDocuments[path]);
   });
 }
