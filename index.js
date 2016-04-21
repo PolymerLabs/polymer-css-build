@@ -39,6 +39,22 @@ const customStyleMatch = pred.AND(
   pred.hasAttrValue('is', 'custom-style')
 );
 
+const styleIncludeMatch = pred.AND(styleMatch, pred.hasAttr('include'));
+
+const inlineScriptMatch = pred.AND(
+  pred.hasTagName('script'),
+  pred.OR(
+    pred.NOT(
+      pred.hasAttr('type')
+    ),
+    pred.hasAttrValue('type', 'text/javascript'),
+    pred.hasAttrValue('type', 'application/javascript')
+  ),
+  pred.NOT(
+    pred.hasAttr('src')
+  )
+);
+
 const scopeMap = new WeakMap();
 
 function getDomModuleStyles(module, scope) {
@@ -71,8 +87,6 @@ function getDomModuleStyles(module, scope) {
   }
   return styles;
 }
-
-const styleIncludeMatch = pred.AND(styleMatch, pred.hasAttr('include'));
 
 function inlineStyleIncludes(style, scope) {
   if (!styleIncludeMatch(style)) {
@@ -123,19 +137,23 @@ function applyShim(ast) {
   Polymer.ApplyShim.transform([{__cssRules: ast}]);
 }
 
-const inlineScriptMatch = pred.AND(
-  pred.hasTagName('script'),
-  pred.OR(
-    pred.NOT(
-      pred.hasAttr('type')
-    ),
-    pred.hasAttrValue('type', 'text/javascript'),
-    pred.hasAttrValue('type', 'application/javascript')
-  ),
-  pred.NOT(
-    pred.hasAttr('src')
-  )
-);
+function shadyShim(ast, style) {
+  const scope = scopeMap.get(style);
+  if (!scope) {
+    return;
+  }
+  Polymer.StyleTransformer.css(ast, scope);
+  const module = domModuleCache[scope];
+  if (module) {
+    const template = dom5.query(module, pred.hasTagName('template'));
+    if (template) {
+      const elements = dom5.queryAll(template, () => true);
+      elements.forEach(el => {
+        addClass(el, scope);
+      })
+    }
+  }
+}
 
 function addClass(node, className) {
   const classAttr = dom5.getAttribute(node, 'class');
@@ -204,19 +222,8 @@ module.exports = (paths) => {
         })
       }
       applyShim(ast);
-      const scope = scopeMap.get(s);
-      if (!nativeShadow && scope) {
-        Polymer.StyleTransformer.css(ast, scope);
-        const module = domModuleCache[scope];
-        if (module) {
-          const template = dom5.query(module, pred.hasTagName('template'));
-          if (template) {
-            const elements = dom5.queryAll(template, () => true);
-            elements.forEach(el => {
-              addClass(el, scope);
-            })
-          }
-        }
+      if (!nativeShadow) {
+        shadyShim(ast, s);
       }
       text = Polymer.CssParse.stringify(ast, true);
       dom5.setTextContent(s, text);
@@ -224,4 +231,4 @@ module.exports = (paths) => {
   }).then(() => {
     return dom5.serialize(analyzer.parsedDocuments[path]);
   });
-}
+};
