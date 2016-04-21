@@ -5,4 +5,4 @@
 1. Vulcanize your project
 2. Checkout this tool
 3. `npm install`
-4. `node index.js path/to/vulcanized-file.html > shimmed-build.html`
+4. `node bin/polymer-css-build path/to/vulcanized-file.html > shimmed-build.html`
