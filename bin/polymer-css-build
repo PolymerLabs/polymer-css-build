@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+/**
+@license
+Copyright (c) 2016 The Polymer Project Authors. All rights reserved.
+This code may only be used under the BSD style license found at http://polymer.github.io/LICENSE.txt
+The complete set of authors may be found at http://polymer.github.io/AUTHORS.txt
+The complete set of contributors may be found at http://polymer.github.io/CONTRIBUTORS.txt
+Code distributed by Google as part of the polymer project is also
+subject to an additional IP rights grant found at http://polymer.github.io/PATENTS.txt
+*/
+const polycss = require('../');
+const cliArgs = require('command-line-args');
+const cli = cliArgs([
+  {
+    name: 'file',
+    type: String,
+    alias: 'f',
+    defaultOption: true,
+    description: 'Files to inline css for',
+    multiple: true,
+    defaultValue: []
+  },
+  {
+    name: 'help',
+    type: Boolean,
+    description: 'Print this message',
+    alias: 'h'
+  }
+]);
+
+function printHelp() {
+  console.log(cli.getUsage({
+    header: 'Pre-apply Polymer CSS tasks',
+    title: 'polymer-css-build'
+  }));
+}
+
+const args = cli.parse();
+if (args.help) {
+  printHelp();
+  process.exit(0);
+}
+
+if (args.file.length === 0) {
+  console.error('No files given!');
+  printHelp();
+  process.exit(1);
+}
+
+polycss(args.file).then(doctext => {
+  // TODO(dfreedm): replace with vinyl-fs when multiple files can be handled
+  require('fs').writeFileSync(args.file[0], doctext, 'utf-8');
+}).catch(err => {
+  console.error(err.stack);
+  process.exit(1);
+})
