@@ -16,7 +16,7 @@ const cli = cliArgs([
     type: String,
     alias: 'f',
     defaultOption: true,
-    description: 'Files to inline css for',
+    description: 'Files to apply Polymer styling build. Files will be overwritten',
     multiple: true,
     defaultValue: []
   },
@@ -25,6 +25,11 @@ const cli = cliArgs([
     type: Boolean,
     description: 'Print this message',
     alias: 'h'
+  },
+  {
+    name: 'build-for-shady',
+    type: Boolean,
+    description: 'Perform Shady DOM shimming. This will make the build no longer compatible with Shadow DOM'
   }
 ]);
 
@@ -47,10 +52,15 @@ if (args.file.length === 0) {
   process.exit(1);
 }
 
-polycss(args.file).then(doctext => {
-  // TODO(dfreedm): replace with vinyl-fs when multiple files can be handled
-  console.log(doctext);
-  // require('fs').writeFileSync(args.file[0], doctext, 'utf-8');
+const fs = require('fs');
+const docs = args.file.map(f => ({
+  url: f,
+  content: fs.readFileSync(f, 'utf8')
+}));
+polycss(docs, args).then(docs => {
+  docs.forEach(d => {
+    fs.writeFileSync(d.url, d.content, 'utf8');
+  });
 }).catch(err => {
   console.error(err.stack);
   process.exit(1);

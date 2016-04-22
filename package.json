@@ -13,6 +13,7 @@
   "devDependencies": {
     "crisper": "^2.0.1",
     "eslint": "^2.5.3",
+    "eslint-plugin-html": "^1.4.0",
     "vulcanize": "^1.14.8"
   },
   "dependencies": {
