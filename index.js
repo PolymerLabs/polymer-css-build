@@ -58,6 +58,7 @@ const inlineScriptMatch = pred.AND(
 const scopeMap = new WeakMap();
 
 function getDomModuleStyles(module) {
+  // TODO: support `.styleModules = ['module-id', ...]` ?
   const styles = dom5.queryAll(module, styleMatch);
   if (!styles.length) {
     return [];
@@ -153,26 +154,49 @@ function findHead(node) {
   return dom5.query(node, pred.hasTagName('head'));
 }
 
-function shadyShim(ast, style) {
+function afterLastInsertion() {
+  if (!lastShadyInsertionPoint) {
+    return null;
+  }
+  const parent = lastShadyInsertionPoint.parentNode;
+  const idx = parent.childNodes.indexOf(lastShadyInsertionPoint);
+  return parent.childNodes[idx + 1];
+}
+
+function moduleIsElement(module, elements) {
+  for (let i = 0; i < elements.length; i++) {
+    if (elements[i].is === module) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function shadyShim(ast, style, elements) {
   const scope = scopeMap.get(style);
-  if (!scope) {
+  // only shim if module is a full polymer element, not just a style module
+  if (!scope || !moduleIsElement(scope, elements)) {
     return;
   }
   Polymer.StyleTransformer.css(ast, scope);
   const module = domModuleCache[scope];
+  if (!module) {
+    return;
+  }
   const head = findHead(module);
-  const insertionPoint = lastShadyInsertionPoint || head.childNodes[0];
   dom5.setAttribute(style, 'scope', scope);
-  dom5.insertBefore(head, insertionPoint, style);
+  const insertionPoint = afterLastInsertion();
+  dom5.insertBefore(head, insertionPoint || head.childNodes[0], style);
+  // leave comment breadcrumb for css property shim to insert new styles
+  const comment = dom5.constructors.comment();
+  dom5.setTextContent(comment, ` Shady DOM styles for ${scope} `)
+  dom5.insertBefore(head, style, comment);
   lastShadyInsertionPoint = style;
-  if (module) {
-    const template = dom5.query(module, pred.hasTagName('template'));
-    if (template) {
-      const elements = dom5.queryAll(template, notStyleMatch);
-      elements.forEach(el => {
-        addClass(el, scope);
-      })
-    }
+  const template = dom5.query(module, pred.hasTagName('template'));
+  // apply scoping to template
+  if (template) {
+    const elements = dom5.queryAll(template, notStyleMatch);
+    elements.forEach(el => addClass(el, scope));
   }
 }
 
@@ -187,12 +211,16 @@ module.exports = (paths, options) => {
     Polymer.Settings.useNativeShadow = false;
   }
   const nativeShadow = Polymer.Settings.useNativeShadow;
+  // build hydrolysis loader
   const loader = new hyd.Loader();
+  // ignore all files we can't find
   loader.addResolver(new hyd.NoopResolver({test: () => true}));
+  // load given files as strings
   paths.forEach(p => {
     loader.addResolver(new hyd.StringResolver(p));
   });
   const analyzer = new hyd.Analyzer(true, loader);
+  // run analyzer on all given files
   return Promise.all(
     paths.map(p => analyzer.metadataTree(p.url))
   ).then(() => {
@@ -204,6 +232,7 @@ module.exports = (paths, options) => {
       }
     });
   }).then(() => {
+    // map dom modules to styles
     return analyzer.nodeWalkAllDocuments(domModuleMatch).map(el => {
       const id = dom5.getAttribute(el, 'id');
       if (!id) {
@@ -216,26 +245,27 @@ module.exports = (paths, options) => {
       return styles;
     });
   }).then(moduleStyles => {
+    // inline and flatten styles into a single list
     const flatStyles = [];
     moduleStyles.forEach(styles => {
+      if (!styles.length) {
+        return;
+      }
       // do style includes
-      styles.forEach(s => {
-        inlineStyleIncludes(s);
-      });
+      styles.forEach(s => inlineStyleIncludes(s));
       // reduce styles to one
+      const finalStyle = styles[styles.length - 1];
       if (styles.length > 1) {
         const consumed = styles.slice(-1);
-        const finalStyle = styles[styles.length - 1];
         const text = styles.map(s => dom5.getTextContent(s));
         consumed.forEach(c => dom5.remove(c));
         dom5.setTextContent(finalStyle, text.join(''));
-        flatStyles.push(finalStyle);
-      } else if (styles.length === 1){
-        flatStyles.push(styles[0]);
       }
+      flatStyles.push(finalStyle);
     });
     return flatStyles;
   }).then(styles =>
+    // add in custom styles
     styles.concat(analyzer.nodeWalkAllDocuments(customStyleMatch))
   ).then(styles => {
     // populate mixin map
@@ -257,7 +287,7 @@ module.exports = (paths, options) => {
       }
       applyShim(ast);
       if (!nativeShadow) {
-        shadyShim(ast, s);
+        shadyShim(ast, s, analyzer.elements);
       }
       text = Polymer.CssParse.stringify(ast, true);
       dom5.setTextContent(s, text);
