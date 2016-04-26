@@ -227,7 +227,7 @@ function addClass(node, className) {
 }
 
 module.exports = (paths, options) => {
-  if (options['build-for-shady']) {
+  if (options && options['build-for-shady']) {
     Polymer.Settings.useNativeShadow = false;
   }
   const nativeShadow = Polymer.Settings.useNativeShadow;
