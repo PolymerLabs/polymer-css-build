@@ -13,6 +13,8 @@ const hyd = require('hydrolysis');
 const dom5 = require('dom5');
 const Polymer = require('./lib/polymer-styling.js');
 
+const pathResolver = new (require('vulcanize/lib/pathresolver'));
+
 const pred = dom5.predicates;
 
 const domModuleCache = Object.create(null);
@@ -106,6 +108,7 @@ function inlineStyleIncludes(style) {
   const styleText = [];
   const includes = getAttributeArray(style, 'include');
   const leftover = [];
+  const baseDocument = style.__ownerDocument;
   includes.forEach(id => {
     const module = domModuleCache[id];
     if (!module) {
@@ -118,7 +121,11 @@ function inlineStyleIncludes(style) {
     includedStyles.forEach(ism => {
       // this style may also have includes
       inlineStyleIncludes(ism);
-      styleText.push(dom5.getTextContent(ism));
+      const inlineDocument = module.__ownerDocument;
+      let includeText = dom5.getTextContent(ism);
+      // adjust paths
+      includeText = pathResolver.rewriteURL(inlineDocument, baseDocument, includeText);
+      styleText.push(includeText);
     });
   });
   // remove inlined includes
@@ -163,27 +170,40 @@ function afterLastInsertion() {
   return parent.childNodes[idx + 1];
 }
 
-function moduleIsElement(module, elements) {
+function getModuleElement(module, elements) {
   for (let i = 0; i < elements.length; i++) {
     if (elements[i].is === module) {
-      return true;
+      return elements[i];
     }
   }
-  return false;
+  return null;
+}
+
+function getTypeExtends(element) {
+  let props = element.properties || [];
+  // loop over element properties with javascript AST
+  for (let i = 0; i < props.length; i++) {
+    if (props[i].name === 'extends') {
+      // node is espree AST node
+      let node = props[i].javascriptNode;
+      // property node has a value node with key and value nodes
+      if (node && node.type === 'Property') {
+        return node.value.value;
+      }
+    }
+  }
 }
 
 function shadyShim(ast, style, elements) {
   const scope = scopeMap.get(style);
+  const element = getModuleElement(scope, elements);
   // only shim if module is a full polymer element, not just a style module
-  if (!scope || !moduleIsElement(scope, elements)) {
+  if (!scope || !element) {
     return;
   }
-  Polymer.StyleTransformer.css(ast, scope);
-  const module = domModuleCache[scope];
-  if (!module) {
-    return;
-  }
-  const head = findHead(module);
+  const ext = getTypeExtends(element);
+  Polymer.StyleTransformer.css(ast, scope, ext);
+  const head = findHead(element);
   dom5.setAttribute(style, 'scope', scope);
   const insertionPoint = afterLastInsertion();
   dom5.insertBefore(head, insertionPoint || head.childNodes[0], style);
@@ -264,10 +284,14 @@ module.exports = (paths, options) => {
       flatStyles.push(finalStyle);
     });
     return flatStyles;
-  }).then(styles =>
+  }).then(styles => {
+    // find custom styles
+    const customStyles = analyzer.nodeWalkAllDocuments(customStyleMatch);
+    // inline custom styles with includes
+    customStyles.forEach(s => inlineStyleIncludes(s));
     // add in custom styles
-    styles.concat(analyzer.nodeWalkAllDocuments(customStyleMatch))
-  ).then(styles => {
+    return styles.concat(customStyles);
+  }).then(styles => {
     // populate mixin map
     styles.forEach(s => {
       const text = dom5.getTextContent(s);
@@ -278,12 +302,11 @@ module.exports = (paths, options) => {
     styles.forEach(s => {
       let text = dom5.getTextContent(s);
       const ast = Polymer.CssParse.parse(text);
-      const isCustomStyle = customStyleMatch(s);
-      if (isCustomStyle) {
+      if (customStyleMatch(s)) {
         // custom-style `:root` selectors need to be processed to `html`
         Polymer.StyleUtil.forEachRule(ast, rule => {
           Polymer.StyleTransformer.documentRule(rule);
-        })
+        });
       }
       applyShim(ast);
       if (!nativeShadow) {

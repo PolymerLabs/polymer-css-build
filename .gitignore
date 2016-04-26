@@ -1,2 +1,3 @@
 node_modules
-lib/.polymer
+lib/polymer
+lib/webcomponentsjs
