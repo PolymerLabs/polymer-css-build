@@ -149,7 +149,7 @@ function applyShim(ast) {
    * Decorated <style> elements are ones with `__cssRules` property
    * with a value of the CSS ast
    */
-  Polymer.ApplyShim.transform([{__cssRules: ast}]);
+  Polymer.StyleUtil.forEachRule(ast, rule => Polymer.ApplyShim.transformRule(rule));
 }
 
 let lastShadyInsertionPoint = null;
@@ -203,7 +203,8 @@ function shadyShim(ast, style, elements) {
   }
   const ext = getTypeExtends(element);
   Polymer.StyleTransformer.css(ast, scope, ext);
-  const head = findHead(element);
+  const module = domModuleCache[scope];
+  const head = findHead(module);
   dom5.setAttribute(style, 'scope', scope);
   const insertionPoint = afterLastInsertion();
   dom5.insertBefore(head, insertionPoint || head.childNodes[0], style);
@@ -224,6 +225,11 @@ function addClass(node, className) {
   const classList = getAttributeArray(node, 'class');
   classList.push(className, 'style-scope');
   dom5.setAttribute(node, 'class', classList.join(' '));
+}
+
+function markElement(el) {
+  const buildType = Polymer.Settings.useNativeShadow ? 'shadow' : 'shady';
+  dom5.setAttribute(el, 'css-build', buildType);
 }
 
 module.exports = (paths, options) => {
@@ -260,6 +266,8 @@ module.exports = (paths, options) => {
       }
       // populate cache
       domModuleCache[id] = el;
+      // mark the module as built
+      markElement(el);
       const styles = getDomModuleStyles(el);
       styles.forEach(s => scopeMap.set(s, id));
       return styles;
@@ -307,6 +315,8 @@ module.exports = (paths, options) => {
         Polymer.StyleUtil.forEachRule(ast, rule => {
           Polymer.StyleTransformer.documentRule(rule);
         });
+        // mark the style as built
+        markElement(s);
       }
       applyShim(ast);
       if (!nativeShadow) {
@@ -317,16 +327,10 @@ module.exports = (paths, options) => {
     });
   }).then(() => {
     return paths.map(p => {
-      const docAst = analyzer.parsedDocuments[p.url];
-      const script = dom5.constructors.element('script');
-      const buildType = options['build-for-shady'] ? 'shady' : 'shadow';
-      dom5.setTextContent(script, `PolymerBuild={css:'${buildType}'}`);
-      const head = dom5.query(docAst, dom5.predicates.hasTagName('head'));
-      dom5.insertBefore(head, head.childNodes[0], script);
       return {
         url: p.url,
         content: dom5.serialize(analyzer.parsedDocuments[p.url])
-      }
+      };
     });
   });
 };

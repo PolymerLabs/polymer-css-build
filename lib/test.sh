@@ -23,6 +23,7 @@ pushd lib/polymer >/dev/null
 ../../bin/polymer-css-build test/unit/custom-style.html test/unit/custom-style-import.html test/unit/sub/style-import.html
 popd >/dev/null
 shadow
+
 cleanup
 
 # shady build
@@ -34,4 +35,4 @@ pushd lib/polymer >/dev/null
 popd >/dev/null
 shady
 
-# cleanup
+cleanup
