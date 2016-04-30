@@ -4,6 +4,7 @@ if [ ! -d polymer ]; then
   git clone git://github.com/Polymer/polymer -b mixins-as-custom-properties
 fi
 pushd polymer
+git checkout .
 git pull
 popd
 
