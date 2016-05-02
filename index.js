@@ -13,8 +13,7 @@ const hyd = require('hydrolysis');
 const dom5 = require('dom5');
 const Polymer = require('./lib/polymer-styling.js');
 
-const VulcanizePathResolver = require('vulcanize/lib/pathresolver');
-const pathResolver = new VulcanizePathResolver();
+const pathResolver = require('./lib/pathresolver');
 
 const pred = dom5.predicates;
 
