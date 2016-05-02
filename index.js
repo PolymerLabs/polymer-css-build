@@ -13,7 +13,8 @@ const hyd = require('hydrolysis');
 const dom5 = require('dom5');
 const Polymer = require('./lib/polymer-styling.js');
 
-const pathResolver = new (require('vulcanize/lib/pathresolver'));
+const VulcanizePathResolver = require('vulcanize/lib/pathresolver');
+const pathResolver = new VulcanizePathResolver();
 
 const pred = dom5.predicates;
 
@@ -59,6 +60,24 @@ const inlineScriptMatch = pred.AND(
 
 const scopeMap = new WeakMap();
 
+function ancestorWalk(node, match) {
+  while(node) {
+    if (match(node)) {
+      return node;
+    }
+    node = node.parentNode;
+  }
+  return null;
+}
+
+function prepend(parent, node) {
+  if (parent.childNodes.length > 0) {
+    dom5.insertBefore(parent, parent.childNodes[0], node);
+  } else {
+    dom5.appendChild(parent, node);
+  }
+}
+
 function getDomModuleStyles(module) {
   // TODO: support `.styleModules = ['module-id', ...]` ?
   const styles = dom5.queryAll(module, styleMatch);
@@ -79,11 +98,11 @@ function getDomModuleStyles(module) {
         templateContent = dom5.constructors.fragment();
         dom5.append(template, templateContent);
       }
-      const parent = dom5.nodeWalkPrior(s, n =>
+      const parent = ancestorWalk(s, n =>
         n === templateContent || n === module
       );
       if (parent !== templateContent) {
-        dom5.append(templateContent, s);
+        prepend(templateContent, s);
       }
     })
   }
@@ -152,24 +171,6 @@ function applyShim(ast) {
   Polymer.StyleUtil.forEachRule(ast, rule => Polymer.ApplyShim.transformRule(rule));
 }
 
-let lastShadyInsertionPoint = null;
-
-function findHead(node) {
-  while (node.parentNode) {
-    node = node.parentNode;
-  }
-  return dom5.query(node, pred.hasTagName('head'));
-}
-
-function afterLastInsertion() {
-  if (!lastShadyInsertionPoint) {
-    return null;
-  }
-  const parent = lastShadyInsertionPoint.parentNode;
-  const idx = parent.childNodes.indexOf(lastShadyInsertionPoint);
-  return parent.childNodes[idx + 1];
-}
-
 function getModuleElement(module, elements) {
   for (let i = 0; i < elements.length; i++) {
     if (elements[i].is === module) {
@@ -204,15 +205,6 @@ function shadyShim(ast, style, elements) {
   const ext = getTypeExtends(element);
   Polymer.StyleTransformer.css(ast, scope, ext);
   const module = domModuleCache[scope];
-  const head = findHead(module);
-  dom5.setAttribute(style, 'scope', scope);
-  const insertionPoint = afterLastInsertion();
-  dom5.insertBefore(head, insertionPoint || head.childNodes[0], style);
-  // leave comment breadcrumb for css property shim to insert new styles
-  const comment = dom5.constructors.comment();
-  dom5.setTextContent(comment, ` Shady DOM styles for ${scope} `)
-  dom5.insertBefore(head, style, comment);
-  lastShadyInsertionPoint = style;
   const template = dom5.query(module, pred.hasTagName('template'));
   // apply scoping to template
   if (template) {
@@ -283,6 +275,7 @@ module.exports = (paths, options) => {
       styles.forEach(s => inlineStyleIncludes(s));
       // reduce styles to one
       const finalStyle = styles[styles.length - 1];
+      dom5.setAttribute(finalStyle, 'scope', scopeMap.get(finalStyle));
       if (styles.length > 1) {
         const consumed = styles.slice(-1);
         const text = styles.map(s => dom5.getTextContent(s));
