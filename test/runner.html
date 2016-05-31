@@ -11,6 +11,10 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 <script src="../../web-component-tester/browser.js"></script>
 <script>
   WCT.loadSuites([
+    '../lib/polymer/test/unit/styling-scoped.html',
+    '../lib/polymer/test/unit/styling-scoped.html?lazyRegister=true&useNativeCSSProperties=true',
+    '../lib/polymer/test/unit/styling-cross-scope-unknown-host.html',
+    '../lib/polymer/test/unit/styling-cross-scope-unknown-host.html?lazyRegister=true&useNativeCSSProperties=true',
     '../lib/polymer/test/unit/styling-cross-scope-var.html',
     '../lib/polymer/test/unit/styling-cross-scope-var.html?lazyRegister=true&useNativeCSSProperties=true',
     '../lib/polymer/test/unit/styling-cross-scope-var.html?dom=shadow',
@@ -22,6 +26,8 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
     '../lib/polymer/test/unit/custom-style.html',
     '../lib/polymer/test/unit/custom-style.html?lazyRegister=true&useNativeCSSProperties=true',
     '../lib/polymer/test/unit/custom-style.html?dom=shadow',
-    '../lib/polymer/test/unit/custom-style.html?dom=shadow&lazyRegister=true&useNativeCSSProperties=true'
+    '../lib/polymer/test/unit/custom-style.html?dom=shadow&lazyRegister=true&useNativeCSSProperties=true',
+    '../lib/polymer/test/unit/custom-style-late.html',
+    '../lib/polymer/test/unit/custom-style-late.html?lazyRegister=true&useNativeCSSProperties=true'
   ]);
 </script>
