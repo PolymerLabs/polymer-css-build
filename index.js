@@ -170,7 +170,7 @@ function applyShim(ast) {
   Polymer.StyleUtil.forEachRule(ast, rule => Polymer.ApplyShim.transformRule(rule));
 }
 
-function getModuleElement(module, elements) {
+function getModuleDefinition(module, elements) {
   for (let i = 0; i < elements.length; i++) {
     if (elements[i].is === module) {
       return elements[i];
@@ -196,20 +196,13 @@ function getTypeExtends(element) {
 
 function shadyShim(ast, style, elements) {
   const scope = scopeMap.get(style);
-  const element = getModuleElement(scope, elements);
+  const moduleDefinition = getModuleDefinition(scope, elements);
   // only shim if module is a full polymer element, not just a style module
-  if (!scope || !element) {
+  if (!scope || !moduleDefinition) {
     return;
   }
-  const ext = getTypeExtends(element);
+  const ext = getTypeExtends(moduleDefinition);
   Polymer.StyleTransformer.css(ast, scope, ext);
-  const module = domModuleCache[scope];
-  const template = dom5.query(module, pred.hasTagName('template'));
-  // apply scoping to template
-  if (template) {
-    const elements = dom5.queryAll(template, notStyleMatch);
-    elements.forEach(el => addClass(el, scope));
-  }
 }
 
 function addClass(node, className) {
@@ -218,9 +211,18 @@ function addClass(node, className) {
   dom5.setAttribute(node, 'class', classList.join(' '));
 }
 
-function markElement(el) {
+function markElement(domModule, scope) {
   const buildType = Polymer.Settings.useNativeShadow ? 'shadow' : 'shady';
-  dom5.setAttribute(el, 'css-build', buildType);
+  dom5.setAttribute(domModule, 'css-build', buildType);
+  // mark elements' subtree under shady build
+  if (buildType === 'shady') {
+    const template = dom5.query(domModule, pred.hasTagName('template'));
+    // apply scoping to template
+    if (template) {
+      const elements = dom5.queryAll(template, notStyleMatch);
+      elements.forEach(el => addClass(el, scope));
+    }
+  }
 }
 
 module.exports = (paths, options) => {
@@ -258,7 +260,7 @@ module.exports = (paths, options) => {
       // populate cache
       domModuleCache[id] = el;
       // mark the module as built
-      markElement(el);
+      markElement(el, id);
       const styles = getDomModuleStyles(el);
       styles.forEach(s => scopeMap.set(s, id));
       return styles;

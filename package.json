@@ -15,7 +15,8 @@
   "devDependencies": {
     "crisper": "^2.0.1",
     "eslint": "^2.5.3",
-    "eslint-plugin-html": "^1.4.0"
+    "eslint-plugin-html": "^1.4.0",
+    "web-component-tester": "^4.2.2"
   },
   "dependencies": {
     "command-line-args": "^2.1.6",
