@@ -172,7 +172,8 @@ function applyShim(ast) {
 
 function getModuleDefinition(module, elements) {
   for (let i = 0; i < elements.length; i++) {
-    if (elements[i].is === module) {
+    const is = elements[i].is;
+    if (is.toLowerCase() === module) {
       return elements[i];
     }
   }
@@ -181,6 +182,7 @@ function getModuleDefinition(module, elements) {
 
 function getTypeExtends(element) {
   let props = element.properties || [];
+  let ret = '';
   // loop over element properties with javascript AST
   for (let i = 0; i < props.length; i++) {
     if (props[i].name === 'extends') {
@@ -188,10 +190,12 @@ function getTypeExtends(element) {
       let node = props[i].javascriptNode;
       // property node has a value node with key and value nodes
       if (node && node.type === 'Property') {
-        return node.value.value;
+        ret = node.value.value;
+        break;
       }
     }
   }
+  return ret.toLowerCase();
 }
 
 function shadyShim(ast, style, elements) {
@@ -215,7 +219,7 @@ function markElement(domModule, scope) {
   const buildType = Polymer.Settings.useNativeShadow ? 'shadow' : 'shady';
   dom5.setAttribute(domModule, 'css-build', buildType);
   // mark elements' subtree under shady build
-  if (buildType === 'shady') {
+  if (buildType === 'shady' && scope) {
     const template = dom5.query(domModule, pred.hasTagName('template'));
     // apply scoping to template
     if (template) {
@@ -257,12 +261,13 @@ module.exports = (paths, options) => {
       if (!id) {
         return [];
       }
+      const scope = id.toLowerCase();
       // populate cache
-      domModuleCache[id] = el;
+      domModuleCache[scope] = el;
       // mark the module as built
-      markElement(el, id);
+      markElement(el, scope);
       const styles = getDomModuleStyles(el);
-      styles.forEach(s => scopeMap.set(s, id));
+      styles.forEach(s => scopeMap.set(s, scope));
       return styles;
     });
   }).then(moduleStyles => {
