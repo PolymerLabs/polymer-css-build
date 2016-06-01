@@ -1,0 +1,15 @@
+language: node_js
+node_js:
+  - "4"
+  - "5"
+  - "6"
+dist: trusty
+sudo: required
+addons:
+  firefox: latest
+  apt:
+    sources:
+    - google-chrome
+    packages:
+    - google-chrome-stable
+script: xvfb-run npm test

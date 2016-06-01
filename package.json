@@ -5,7 +5,6 @@
   "main": "index.js",
   "bin": "bin/polymer-css-build",
   "scripts": {
-    "test-travis": "xvfb-run npm run test",
     "test": "eslint **/*.js && npm run prepare && lib/test.sh",
     "prepare": "cd lib; ./prepare.sh",
     "generate": "npm run prepare; cd lib; ./generate.sh"
