@@ -12,7 +12,4 @@ addons:
     - google-chrome
     packages:
     - google-chrome-stable
-script:
-  - source lib/test.sh
-  - xvfb-run test_shadow
-  - xvfb-run test_shady
+script: xvfb-run npm test
