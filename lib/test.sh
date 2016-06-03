@@ -6,11 +6,6 @@ cleanup() {
   popd >/dev/null
 }
 
-X=""
-if [ ${TRAVIS} ]; then
-  X="xvfb-run"
-fi
-
 prep_shadow() {
   pushd lib/polymer >/dev/null
   ../../bin/polymer-css-build test/unit/styling-scoped-elements.html test/unit/styling-scoped.html
@@ -23,7 +18,10 @@ prep_shadow() {
 }
 
 test_shadow() {
-  $X wct -l chrome -l firefox test/runner.html
+  cleanup
+  echo "= shadow build ="
+  prep_shadow
+  wct -l chrome -l firefox test/runner.html
 }
 
 prep_shady() {
@@ -37,21 +35,13 @@ prep_shady() {
 }
 
 test_shady() {
-  $X wct -l chrome -l firefox test/shady-runner.html
+  cleanup
+  echo "= shady build ="
+  prep_shady
+  wct -l chrome -l firefox test/shady-runner.html
 }
 
-# all normal
-cleanup
-
-# shadow build
-echo "= shadow build ="
-prep_shadow
-test_shadow
-
-# revert
-cleanup
-
-# shady build
-echo "= shady build ="
-prep_shady
-test_shady
+if [ "$0" == "${BASH_SOURCE}" ]; then
+  test_shadow
+  test_shady
+fi
