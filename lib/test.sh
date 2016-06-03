@@ -6,6 +6,11 @@ cleanup() {
   popd >/dev/null
 }
 
+X=""
+if [ ${TRAVIS} ]; then
+  X="xvfb-run"
+fi
+
 prep_shadow() {
   pushd lib/polymer >/dev/null
   ../../bin/polymer-css-build test/unit/styling-scoped-elements.html test/unit/styling-scoped.html
@@ -18,7 +23,7 @@ prep_shadow() {
 }
 
 test_shadow() {
-  wct -l chrome -l firefox test/runner.html
+  $X wct -l chrome -l firefox test/runner.html
 }
 
 prep_shady() {
@@ -32,7 +37,7 @@ prep_shady() {
 }
 
 test_shady() {
-  wct -l chrome -l firefox test/shady-runner.html
+  $X wct -l chrome -l firefox test/shady-runner.html
 }
 
 # all normal
