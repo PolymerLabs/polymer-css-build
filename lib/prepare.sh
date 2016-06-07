@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -e
 if [ ! -d polymer ]; then
-  git clone git://github.com/Polymer/polymer -b mixins-as-custom-properties
+  git clone git://github.com/Polymer/polymer -b master
 fi
 pushd polymer
-git checkout .
+git checkout master
 git pull
 popd
 

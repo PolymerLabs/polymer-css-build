@@ -2,7 +2,7 @@
 set -e
 cleanup() {
   pushd lib/polymer >/dev/null
-  git checkout .
+  git reset --hard
   popd >/dev/null
 }
 
