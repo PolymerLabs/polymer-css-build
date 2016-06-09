@@ -24,6 +24,7 @@ const domModuleMatch = pred.AND(
   pred.hasAttr('id')
 );
 
+// TODO: upstream to dom5
 const styleMatch = pred.AND(
   pred.hasTagName('style'),
   pred.OR(
@@ -43,6 +44,7 @@ const customStyleMatch = pred.AND(
 
 const styleIncludeMatch = pred.AND(styleMatch, pred.hasAttr('include'));
 
+// TODO: upstream to dom5
 const inlineScriptMatch = pred.AND(
   pred.hasTagName('script'),
   pred.OR(
@@ -59,6 +61,7 @@ const inlineScriptMatch = pred.AND(
 
 const scopeMap = new WeakMap();
 
+// TODO: upstream to dom5
 function ancestorWalk(node, match) {
   while(node) {
     if (match(node)) {
@@ -77,7 +80,11 @@ function prepend(parent, node) {
   }
 }
 
-function getDomModuleStyles(module) {
+/*
+ * Collect styles from dom-module
+ * In addition, make sure those styles are inside a template
+ */
+function getAndFixDomModuleStyles(module) {
   // TODO: support `.styleModules = ['module-id', ...]` ?
   const styles = dom5.queryAll(module, styleMatch);
   if (!styles.length) {
@@ -92,11 +99,13 @@ function getDomModuleStyles(module) {
     dom5.append(module, template);
   } else {
     styles.forEach(s => {
+      // create a template if one does not exist for this dom-module with styles
       let templateContent = template.childNodes[0];
       if (!templateContent) {
         templateContent = dom5.constructors.fragment();
         dom5.append(template, templateContent);
       }
+      // ensure element styles are inside the template element
       const parent = ancestorWalk(s, n =>
         n === templateContent || n === module
       );
@@ -134,7 +143,7 @@ function inlineStyleIncludes(style) {
       leftover.push(id);
       return;
     }
-    const includedStyles = getDomModuleStyles(module);
+    const includedStyles = getAndFixDomModuleStyles(module);
     // gather included styles
     includedStyles.forEach(ism => {
       // this style may also have includes
@@ -170,18 +179,17 @@ function applyShim(ast) {
   Polymer.StyleUtil.forEachRule(ast, rule => Polymer.ApplyShim.transformRule(rule));
 }
 
-function getModuleDefinition(module, elements) {
-  for (let i = 0; i < elements.length; i++) {
-    const is = elements[i].is;
-    if (is.toLowerCase() === module) {
-      return elements[i];
+function getModuleDefinition(moduleName, elementDescriptors) {
+  for (let ed of elementDescriptors) {
+    if (ed.is.toLowerCase() === moduleName) {
+      return ed;
     }
   }
   return null;
 }
 
-function getTypeExtends(element) {
-  let props = element.properties || [];
+function getTypeExtends(elementDescriptor) {
+  let props = elementDescriptor.properties || [];
   let ret = '';
   // loop over element properties with javascript AST
   for (let i = 0; i < props.length; i++) {
@@ -211,7 +219,12 @@ function shadyShim(ast, style, elements) {
 
 function addClass(node, className) {
   const classList = getAttributeArray(node, 'class');
-  classList.push(className, 'style-scope');
+  if (!classList.includes('style-scope')) {
+    classList.push('style-scope');
+  }
+  if (!classList.includes(className)) {
+    classList.push(className);
+  }
   dom5.setAttribute(node, 'class', classList.join(' '));
 }
 
@@ -229,7 +242,7 @@ function markElement(domModule, scope) {
   }
 }
 
-module.exports = (paths, options) => {
+function polymerCssBuild(paths, options) {
   if (options && options['build-for-shady']) {
     Polymer.Settings.useNativeShadow = false;
   }
@@ -266,7 +279,7 @@ module.exports = (paths, options) => {
       domModuleCache[scope] = el;
       // mark the module as built
       markElement(el, scope);
-      const styles = getDomModuleStyles(el);
+      const styles = getAndFixDomModuleStyles(el);
       styles.forEach(s => scopeMap.set(s, scope));
       return styles;
     });
@@ -332,4 +345,6 @@ module.exports = (paths, options) => {
       };
     });
   });
-};
+}
+
+exports.polymerCssBuild = polymerCssBuild;

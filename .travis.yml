@@ -6,7 +6,7 @@ node_js:
 dist: trusty
 sudo: required
 addons:
-  firefox: latest
+  firefox: 46
   apt:
     sources:
     - google-chrome
