@@ -117,6 +117,7 @@ function getAndFixDomModuleStyles(module) {
   return styles;
 }
 
+// TODO: consider upstreaming to dom5
 function getAttributeArray(node, attribute) {
   const attr = dom5.getAttribute(node, attribute);
   let array;
