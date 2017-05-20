@@ -313,20 +313,22 @@ function polymerCssBuild(paths, options) {
       if (!styles.length) {
         return;
       }
-      // do style includes
-      if (!options['no-inline-includes']) {
+      if (options['preserve-styles']) {
+        styles.forEach(s => flatStyles.push(s));
+      } else {
+        // do style includes
         styles.forEach(s => inlineStyleIncludes(s));
+        // reduce styles to one
+        const finalStyle = styles[styles.length - 1];
+        dom5.setAttribute(finalStyle, 'scope', scopeMap.get(finalStyle));
+        if (styles.length > 1) {
+          const consumed = styles.slice(0, -1);
+          const text = styles.map(s => dom5.getTextContent(s));
+          consumed.forEach(c => dom5.remove(c));
+          dom5.setTextContent(finalStyle, text.join(''));
+        }
+        flatStyles.push(finalStyle);
       }
-      // reduce styles to one
-      const finalStyle = styles[styles.length - 1];
-      dom5.setAttribute(finalStyle, 'scope', scopeMap.get(finalStyle));
-      if (styles.length > 1) {
-        const consumed = styles.slice(0, -1);
-        const text = styles.map(s => dom5.getTextContent(s));
-        consumed.forEach(c => dom5.remove(c));
-        dom5.setTextContent(finalStyle, text.join(''));
-      }
-      flatStyles.push(finalStyle);
     });
     return flatStyles;
   }).then(styles => {

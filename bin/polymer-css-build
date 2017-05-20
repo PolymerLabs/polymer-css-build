@@ -41,9 +41,9 @@ const options = [
     description: 'Output file names, must be in same order as input files. If not specified, files will be overwritten'
   },
   {
-    name: 'no-inline-includes',
+    name: 'preserve-styles',
     type: Boolean,
-    description: 'Disable inlining <style include> elements'
+    description: 'Preserve <style> elements (don\'t inline include= nor combine tags together)'
   }
 ];
 
