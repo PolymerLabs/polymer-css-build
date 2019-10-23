@@ -103,7 +103,7 @@ function getAndFixDomModuleStyles(domModule) {
   if (!template) {
     template = dom5.constructors.element('template');
     const content = dom5.constructors.fragment();
-    styles.forEach(s => dom5.append(content, s));
+    styles.forEach((s) => dom5.append(content, s));
     dom5.append(template, content);
     dom5.append(domModule, template);
   } else {
@@ -504,6 +504,15 @@ function buildInlineDocumentSet(analysis) {
   return inlineHTMLDocumentSet;
 }
 
+const styleMoverScript = `(function() {
+  var currentScript = document.currentScript || document._currentScript;
+  if (!currentScript) return;
+  var ownerDocument = currentScript.ownerDocument;
+  if (ownerDocument !== window.document) {
+    window.document.head.appendChild(currentScript.previousElementSibling);
+  }})();
+  `.trim();
+
 async function polymerCssBuild(paths, options = {}) {
   const nativeShadow = options ? !options['build-for-shady'] : true;
   const polymerVersion = options['polymer-version'] || 2;
@@ -655,6 +664,63 @@ async function polymerCssBuild(paths, options = {}) {
     text = CssParse.stringify(ast, true);
     dom5.setTextContent(s, text);
   });
+
+  // if specified, merge all styles into one,
+  // in the order of element registration
+  if (options && options['single-style']) {
+    let finalStyleText = '';
+    // base path from first document
+    const [firstDocument, ] = analysis.getFeatures({kind: 'html-document', externalPackages: true});
+    const extractStylePath = firstDocument.sourceRange.file;
+    /** @type {!Object<string, !Object>} */
+    const tagMap = {};
+    // invert scope map, tagName -> style
+    for (const style of flatStyles) {
+      const scope = scopeMap.get(style);
+      if (scope) {
+        tagMap[scopeMap.get(style)] = style;
+      }
+    }
+    const unscopedStyleIds = [];
+    // first, custom-styles
+    for (const customStyle of customStyles) {
+      const text = dom5.getTextContent(customStyle);
+      finalStyleText += pathResolver.rewriteURL(customStyle.__ownerDocument, extractStylePath, text);
+      dom5.remove(customStyle);
+    }
+    // next element styles in order of element registration
+    for (const {tagName} of analysis.getFeatures({kind: 'polymer-element', externalPackages: true})) {
+      const style = tagMap[tagName];
+      if (!style) {
+        continue;
+      }
+      unscopedStyleIds.push(...(getAttributeArray(style, 'include')));
+      const text = dom5.getTextContent(style);
+      finalStyleText += pathResolver.rewriteURL(style.__ownerDocument, extractStylePath, text);
+      dom5.remove(style);
+    }
+    // add unscoped styles to the end
+    for (const id of unscopedStyleIds) {
+      const domModule = domModuleMap[id];
+      if (!domModule) {
+        continue;
+      }
+      const styles = getAndFixDomModuleStyles(domModule);
+      for (const style of styles) {
+        finalStyleText += dom5.getTextContent(style);
+        dom5.remove(style);
+      }
+    }
+    const finalStyle = dom5.constructors.element('style');
+    dom5.setAttribute(finalStyle, 'css-build-single', '');
+    dom5.setTextContent(finalStyle, finalStyleText);
+    const htmlDocument = firstDocument.parsedDocument.ast;
+    const head = dom5.query(htmlDocument, pred.hasTagName('head'));
+    dom5.append(head, finalStyle);
+    const script = dom5.constructors.element('script');
+    dom5.setTextContent(script, styleMoverScript);
+    dom5.append(head, script);
+  }
   // update inline HTML documents
   for (const inlineDocument of inlineHTMLDocumentSet) {
     updateInlineDocument(inlineDocument);
